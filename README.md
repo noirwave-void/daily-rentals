@@ -25,5 +25,15 @@ npm run dev
 
 ## Supabase setup
 
-The user data schema is in `supabase/migrations/202609220001_haven_schema.sql`. It creates protected profiles, saved listings, and bookings tables, plus a profile trigger for new authenticated users. Create a Supabase project, copy `.env.example` to `.env.local`, set its URL and anon key, and apply the migration using the Supabase SQL editor or CLI. A live project cannot be created from this workspace without the project/account credentials.
+The migrations in `supabase/migrations/` create protected profiles, inventory, availability, reviews, saved listings, bookings, and transactions. They also add the atomic `book_listing` function, which prevents overlapping confirmed/pending reservations.
+
+1. Create a Supabase project and enable Email/Password authentication.
+2. Copy `.env.example` to `.env.local` and set its URL and anon key.
+3. Apply migrations in order using the Supabase SQL editor or `supabase db push`.
+4. Deploy the functions: `supabase functions deploy create-payment-intent stripe-webhook send-booking-email`.
+5. Add the server secrets: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, and `MAIL_FROM`.
+
+Configure Stripe to send `payment_intent.succeeded` events to the `stripe-webhook` function. The webhook marks both the payment transaction and booking as confirmed. `send-booking-email` is ready to send a confirmation after the payment completes.
+
+The application deliberately uses mock listings until Supabase is connected. The live data operations are in `src/rental-api.js`; use them as the integration layer when swapping the demonstration inventory for database queries.
 "# daily-rentals" 
