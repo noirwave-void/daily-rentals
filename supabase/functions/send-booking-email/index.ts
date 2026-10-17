@@ -1,3 +1,0 @@
-import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
-import { Resend } from 'https://esm.sh/resend@4.0.0';
-serve(async req=>{try{const {email,listingName,checkIn,checkOut,total}=await req.json();const resend=new Resend(Deno.env.get('RESEND_API_KEY'));await resend.emails.send({from:Deno.env.get('MAIL_FROM')!,to:email,subject:`Your Haven stay is confirmed: ${listingName}`,html:`<h1>Your stay is confirmed</h1><p>${listingName}</p><p>${checkIn} to ${checkOut}</p><p>Total: $${total}</p>`});return Response.json({sent:true})}catch(error){return Response.json({error:error.message},{status:400})}});
