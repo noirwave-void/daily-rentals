@@ -34,7 +34,6 @@ const toISODate = (date: Date) => `${date.getFullYear()}-${String(date.getMonth(
 const addDays = (date: Date, days: number) => { const next = new Date(date); next.setDate(next.getDate() + days); return next }
 const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 const nightsBetween = (start: string, end: string) => Math.max(1, Math.round((new Date(`${end}T12:00:00`).getTime() - new Date(`${start}T12:00:00`).getTime()) / 86400000))
-
 function StayDatePicker({ id, start, end, step, onPick, onStep, onDone }: { id: string; start: string; end: string; step: 'start' | 'end'; onPick: (date: string) => void; onStep: (step: 'start' | 'end') => void; onDone: () => void }) {
   const [month, setMonth] = useState(() => { const date = new Date(); date.setDate(1); return date })
   const today = toISODate(new Date())
@@ -81,6 +80,46 @@ const stays: Stay[] = [
 
 const savedStaysStorageKey = 'haven-saved-stays'
 
+const additionalPropertyPhotos = [
+  'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1500&q=85',
+  'https://images.unsplash.com/photo-1616486029423-aaa4789e8c9a?auto=format&fit=crop&w=1500&q=85',
+  'https://images.unsplash.com/photo-1618221195710-dd6b41faaea6?auto=format&fit=crop&w=1500&q=85',
+  'https://images.unsplash.com/photo-1615874694520-474822394e73?auto=format&fit=crop&w=1500&q=85',
+  'https://images.unsplash.com/photo-1600210491369-e753d80a41f3?auto=format&fit=crop&w=1500&q=85',
+  'https://images.unsplash.com/photo-1600573472592-401b489a3cdc?auto=format&fit=crop&w=1500&q=85',
+]
+
+const propertyImages: string[][] = stays.map((stay, index) => [
+  stay.image,
+  additionalPropertyPhotos[index % additionalPropertyPhotos.length],
+  additionalPropertyPhotos[(index + 3) % additionalPropertyPhotos.length],
+])
+
+function responsiveImageUrl(source: string, width: number) {
+  return source.replace(/([?&]w=)\d+/, (_, parameter) => `${parameter}${width}`)
+}
+
+function StayPhotoGallery({ stay, images, variant, onOpen, speed }: { stay: Stay; images: string[]; variant: 'listing' | 'detail'; onOpen?: () => void; speed?: string }) {
+  const [activeImage, setActiveImage] = useState(0)
+  const goToImage = (direction: number) => setActiveImage((index) => (index + direction + images.length) % images.length)
+  const image = images[activeImage]
+  const srcSet = [640, 960, 1440, 1920].map((width) => `${responsiveImageUrl(image, width)} ${width}w`).join(', ')
+
+  return <div className={`photo-gallery ${variant === 'detail' ? 'detail-photo' : 'stay-image'}`}>
+    {onOpen
+      ? <button type="button" className="photo-gallery-open" onClick={onOpen} aria-label={`View ${stay.name}`}>
+        <img src={responsiveImageUrl(image, 1200)} srcSet={srcSet} sizes={variant === 'detail' ? '100vw' : '(max-width: 650px) 90vw, (max-width: 900px) 65vw, 58vw'} alt={activeImage === 0 ? stay.alt : `Sample property photo ${activeImage + 1} of ${stay.name}`} width="1500" height="1000" loading="lazy" style={{ objectPosition: stay.position }} data-speed={speed} />
+      </button>
+      : <img src={responsiveImageUrl(image, 1600)} srcSet={srcSet} sizes="100vw" alt={activeImage === 0 ? stay.alt : `Sample property photo ${activeImage + 1} of ${stay.name}`} width="1500" height="1000" loading="eager" style={{ objectPosition: stay.position }} />}
+    {variant === 'detail' && <span>Sample imagery · confirm property photos before publishing</span>}
+    <div className="photo-gallery-controls" aria-label={`${stay.name} photos`}>
+      <button type="button" aria-label={`Previous photo of ${stay.name}`} onClick={() => goToImage(-1)}>‹</button>
+      <span aria-live="polite">{activeImage + 1} / {images.length}</span>
+      <button type="button" aria-label={`Next photo of ${stay.name}`} onClick={() => goToImage(1)}>›</button>
+    </div>
+  </div>
+}
+
 function App() {
   const initialCheckIn = addDays(new Date(), 7)
   const [place, setPlace] = useState('Anywhere')
@@ -104,6 +143,7 @@ function App() {
   const [dateStep, setDateStep] = useState<'start' | 'end'>('start')
   const [count, setCount] = useState(0)
   const [sortMode, setSortMode] = useState<SortMode>('recommended')
+  const [listingQuery, setListingQuery] = useState('')
   const searchRoot = useRef<HTMLDivElement>(null)
   const pickerTrigger = useRef<HTMLButtonElement | null>(null)
   const dialogRef = useRef<HTMLElement>(null)
@@ -143,9 +183,13 @@ function App() {
     }
   }, [])
 
-  const filtered = useMemo(() => stays.filter((stay) =>
-    (place === 'Anywhere' || stay.place.includes(place)) && stay.guests >= guests && stay.price <= maxPrice && (!instantOnly || stay.instant),
-  ).sort((a, b) => sortMode === 'price-low' ? a.price - b.price : sortMode === 'price-high' ? b.price - a.price : sortMode === 'capacity' ? b.guests - a.guests : sortMode === 'location' ? a.place.localeCompare(b.place) : a.id - b.id), [place, guests, maxPrice, instantOnly, sortMode])
+  const filtered = useMemo(() => {
+    const query = listingQuery.trim().toLocaleLowerCase()
+    return stays.filter((stay) =>
+      (place === 'Anywhere' || stay.place.includes(place)) && stay.guests >= guests && stay.price <= maxPrice && (!instantOnly || stay.instant) &&
+      (!query || [stay.name, stay.place, stay.type, ...stay.amenities].some((value) => value.toLocaleLowerCase().includes(query))),
+    ).sort((a, b) => sortMode === 'price-low' ? a.price - b.price : sortMode === 'price-high' ? b.price - a.price : sortMode === 'capacity' ? b.guests - a.guests : sortMode === 'location' ? a.place.localeCompare(b.place) : a.id - b.id)
+  }, [place, guests, maxPrice, instantOnly, sortMode, listingQuery])
 
   useEffect(() => {
     if (count > 0 && count % 2 === 0) window.ScrollTrigger?.refresh()
@@ -247,7 +291,7 @@ function App() {
   }
 
   function resetSearch() {
-    setPlace('Anywhere'); setGuests(2); setMaxPrice(250); setInstantOnly(false); setSortMode('recommended')
+    setPlace('Anywhere'); setGuests(2); setMaxPrice(250); setInstantOnly(false); setSortMode('recommended'); setListingQuery('')
   }
 
   function clearPlace() { setPlace('Anywhere') }
@@ -301,18 +345,19 @@ function App() {
               <h1 id="hero-title">Find room<br />to arrive</h1>
               <div className="hero-bottom">
                 <p>Find a little room to settle in, wherever the day takes you.</p>
-                <a className="button button-light" href="#stays">Explore stays <span aria-hidden="true">↘</span></a>
+                <a className="button button-light" href="#search">Explore stays <span aria-hidden="true">↘</span></a>
               </div>
             </div>
             <span className="hero-caption">A slower way to find your next place</span>
           </section>
 
-          <section className="search-section" aria-label="Search stays">
+          <section className="search-section" id="search" aria-label="Search stays">
             <div className="search-intro">
               <h2>Start with the<br />shape of your stay.</h2>
               <p>Choose a place, dates, and the people coming along. The list will follow.</p>
             </div>
             <div className="search-tools" ref={searchRoot}>
+              {activePicker && <button type="button" className="picker-backdrop" aria-label="Close search options" onClick={closePicker} />}
               <div className="search-fields">
               <div className="search-field picker-wrap">
                   <span className="field-label">Where</span>
@@ -355,25 +400,30 @@ function App() {
               <div className="listing-controls"><label>Sort by<select aria-label="Sort stays" value={sortMode} onChange={(event) => setSortMode(event.target.value as SortMode)}><option value="recommended">Recommended</option><option value="price-low">Price: low to high</option><option value="price-high">Price: high to low</option><option value="capacity">Guest capacity</option><option value="location">Location A–Z</option></select></label></div>
             </div>
             <p className="inventory-note" role="note">Prototype inventory: names, locations, rates, amenities, booking options, and photos are examples, not verified listings.</p>
+            <label className="listing-search">
+              <span className="listing-search-icon" aria-hidden="true">⌕</span>
+              <span className="visually-hidden">Search stays by name, destination, type, or amenity</span>
+              <input type="search" value={listingQuery} onChange={(event) => setListingQuery(event.target.value)} placeholder="Search by name, place, or style" />
+              {listingQuery && <button type="button" aria-label="Clear stay search" onClick={() => setListingQuery('')}>×</button>}
+            </label>
             <div className="active-filters" aria-label="Active filters">
               {place !== 'Anywhere' && <button onClick={clearPlace}>Place: {place} <span aria-hidden="true">×</span></button>}
               {guests !== 2 && <button onClick={() => setGuests(2)}>{guests} guests <span aria-hidden="true">×</span></button>}
               {maxPrice !== 250 && <button onClick={() => setMaxPrice(250)}>Up to ${maxPrice}/night <span aria-hidden="true">×</span></button>}
               {instantOnly && <button onClick={() => setInstantOnly(false)}>Instant Book <span aria-hidden="true">×</span></button>}
-              {(place !== 'Anywhere' || guests !== 2 || maxPrice !== 250 || instantOnly) && <button className="clear-filters" onClick={resetSearch}>Clear all</button>}
+              {listingQuery && <button onClick={() => setListingQuery('')}>Search: {listingQuery} <span aria-hidden="true">×</span></button>}
+              {(place !== 'Anywhere' || guests !== 2 || maxPrice !== 250 || instantOnly || listingQuery) && <button className="clear-filters" onClick={resetSearch}>Clear all</button>}
             </div>
-            {filtered.length ? <div className="stay-gallery">{filtered.map((stay, index) => <article className={`stay stay-${index % 4}`} key={stay.id} data-reveal>
-              <button className="stay-image" onClick={() => openStay(stay)} aria-label={`View ${stay.name}`}>
-                <img src={stay.image} alt={stay.alt} loading="lazy" width="1500" height="1000" style={{ objectPosition: stay.position }} data-speed={index % 2 ? '1.08' : '0.88'} />
-              </button>
+            {filtered.length ? <div className="stay-gallery">{filtered.map((stay, index) => <article className={`stay stay-${(stay.id - 1) % 4}`} key={stay.id} data-reveal>
+              <StayPhotoGallery key={stay.id} stay={stay} images={propertyImages[stay.id - 1]} variant="listing" onOpen={() => openStay(stay)} speed={index % 2 ? '1.08' : '0.88'} />
               <div className="stay-copy">
                 <button className="stay-name" onClick={() => openStay(stay)}>{stay.name}</button>
-                <p>{stay.place} · {stay.type} · {stay.beds} {stay.beds === 1 ? 'bed' : 'beds'} · Up to {stay.guests} guests</p>
+                <p className="stay-meta">{stay.place} · {stay.type} · {stay.beds} {stay.beds === 1 ? 'bed' : 'beds'} · Up to {stay.guests} guests</p>
                 {stay.instant && <p className="stay-availability">Instant booking available · sample</p>}
                 <p className="stay-amenities"><span>Example amenities:</span> {stay.amenities.join(' · ')}</p>
                 <div className="stay-price"><span><strong>${stay.price}</strong> per night</span><span>${stay.price * nightsBetween(start, end)} stay total</span></div>
               </div>
-            </article>)}</div> : <div className="empty-results" role="status" aria-live="polite"><h3>No stays match those filters.</h3><p>Try loosening one or more choices to see the sample inventory.</p><div className="empty-filter-suggestions">{place !== 'Anywhere' && <button className="text-link" onClick={clearPlace}>Search anywhere</button>}{guests > 2 && <button className="text-link" onClick={() => setGuests(2)}>Show places for 2 guests</button>}{maxPrice < 250 && <button className="text-link" onClick={() => setMaxPrice(250)}>Raise price limit to $250</button>}{instantOnly && <button className="text-link" onClick={() => setInstantOnly(false)}>Include non-Instant Book stays</button>}<button className="text-link" onClick={resetSearch}>Clear all filters</button></div></div>}
+            </article>)}</div> : <div className="empty-results" role="status" aria-live="polite"><h3>No stays match those filters.</h3><p>Try loosening one or more choices to see the sample inventory.</p><div className="empty-filter-suggestions">{listingQuery && <button className="text-link" onClick={() => setListingQuery('')}>Clear search</button>}{place !== 'Anywhere' && <button className="text-link" onClick={clearPlace}>Search anywhere</button>}{guests > 2 && <button className="text-link" onClick={() => setGuests(2)}>Show places for 2 guests</button>}{maxPrice < 250 && <button className="text-link" onClick={() => setMaxPrice(250)}>Raise price limit to $250</button>}{instantOnly && <button className="text-link" onClick={() => setInstantOnly(false)}>Include non-Instant Book stays</button>}<button className="text-link" onClick={resetSearch}>Clear all filters</button></div></div>}
             <p className="sample-note">Sample stays, locations and rates for this prototype. Confirm inventory before publishing.</p>
           </section>
 
@@ -422,7 +472,7 @@ function StayDetails({ stay, start, end, guests, setStart, setEnd, setGuests, on
   return <section className="stay-detail-page" aria-labelledby="detail-title">
     <div className="detail-nav"><button className="text-link" onClick={onBack}>← Back to stays</button><div className="detail-share-wrap"><button className="detail-share" onClick={async () => { try { await navigator.clipboard.writeText(window.location.href); setCopyStatus('Stay link copied.') } catch { setCopyStatus('Copy the page address from your browser to share this sample stay.') } }}>{copyStatus ? 'Copied' : 'Copy link'}</button>{copyStatus && <span role="status" aria-live="polite">{copyStatus}</span>}</div></div>
     <div className="detail-heading"><div><p className="detail-location">{stay.place}</p><h1 id="detail-title">{stay.name}</h1></div><p>{stay.type} · {stay.beds} {stay.beds === 1 ? 'bed' : 'beds'} · Up to {stay.guests} guests</p></div>
-    <div className="detail-photo"><img src={stay.image} alt={stay.alt} width="1500" height="1000" /><span>Sample listing image · replace with verified property photography</span></div>
+    <StayPhotoGallery key={stay.id} stay={stay} images={propertyImages[stay.id - 1]} variant="detail" />
     <div className="detail-layout">
       <div className="detail-content">
         <section><h2>A little space to settle in.</h2><p>This {stay.type.toLowerCase()} in {stay.place} is sample listing content for the Haven prototype. Confirm every property description with its host before publishing.</p><p className="detail-rating">Up to {stay.guests} guests · {stay.instant ? 'Instant Book preview' : 'Request-to-book preview'}</p></section>
