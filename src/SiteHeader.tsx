@@ -2,9 +2,11 @@ import { Fragment, useEffect, useRef, useState } from 'react'
 
 type SiteHeaderProps = {
   onSignIn: () => void
+  onShowSaved: () => void
+  savedCount: number
 }
 
-export function SiteHeader({ onSignIn }: SiteHeaderProps) {
+export function SiteHeader({ onSignIn, onShowSaved, savedCount }: SiteHeaderProps) {
   const [scrolled, setScrolled] = useState(() => window.scrollY > 24)
   const [menuOpen, setMenuOpen] = useState(false)
   const menuButton = useRef<HTMLButtonElement>(null)
@@ -67,7 +69,14 @@ export function SiteHeader({ onSignIn }: SiteHeaderProps) {
 
   function signIn() {
     closeMenu()
+    menuButton.current?.focus()
     onSignIn()
+  }
+
+  function showSaved() {
+    closeMenu()
+    menuButton.current?.focus()
+    onShowSaved()
   }
 
   return <Fragment>
@@ -78,6 +87,7 @@ export function SiteHeader({ onSignIn }: SiteHeaderProps) {
         <a href="#how-it-works">How it works</a>
         <a href="#footer">Help</a>
       </nav>
+      <button className="saved-shortcut" type="button" aria-label={`Saved stays, ${savedCount} saved`} onClick={showSaved}>Saved <span>{savedCount}</span></button>
       <button className="signin" type="button" onClick={signIn}>Sign in</button>
       <button
         ref={menuButton}
@@ -94,6 +104,7 @@ export function SiteHeader({ onSignIn }: SiteHeaderProps) {
         <a ref={firstMenuLink} href="#stays" tabIndex={menuOpen ? 0 : -1} onClick={closeMenu}>Find a stay</a>
         <a href="#how-it-works" tabIndex={menuOpen ? 0 : -1} onClick={closeMenu}>How it works</a>
         <a href="#footer" tabIndex={menuOpen ? 0 : -1} onClick={closeMenu}>Help</a>
+        <button type="button" tabIndex={menuOpen ? 0 : -1} onClick={showSaved}>Saved stays ({savedCount})</button>
         <button type="button" tabIndex={menuOpen ? 0 : -1} onClick={signIn}>Sign in</button>
       </nav>
     </header>
